@@ -1,0 +1,17 @@
+[gd_scene load_steps=4 format=3 uid="uid://bm71nvca1dynu"]
+
+[ext_resource type="Shader" path="res://Shaders/wind.gdshader" id="1_ehms4"]
+
+[sub_resource type="QuadMesh" id="QuadMesh_0xi4o"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_4pfum"]
+render_priority = 0
+shader = ExtResource("1_ehms4")
+shader_parameter/windDirection = Vector2(1, 0)
+
+[node name="ShaderDevelopment" type="Node3D"]
+
+[node name="CSGMesh3D2" type="CSGMesh3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, -4.37114e-08, -1, 0, 1, -4.37114e-08, 0, 0, 0)
+mesh = SubResource("QuadMesh_0xi4o")
+material = SubResource("ShaderMaterial_4pfum")
