@@ -3,26 +3,15 @@ render_mode cull_disabled;
 
 uniform float wind_speed = 0.2;
 uniform float wind_strength = 2.0;
-// How big, in world space, is the noise texture
-// wind will tile every wind_texture_tile_size
+
+uniform sampler2D wind_noise :source_color;
 uniform float wind_texture_tile_size = 20.0;
 uniform float wind_vertical_strength = 0.3;
 uniform vec2 wind_horizontal_direction = vec2(1.0,0.5);
+varying float wind_noise_intensity;
 
-uniform sampler2D color_ramp:source_color;
+uniform sampler2D color:source_color;
 uniform float highlight_roughness_intensity = 1.0;
-// we need a tiling noise here!
-uniform sampler2D wind_noise :source_color;
-
-uniform vec3 character_position;
-uniform float character_radius = 3.0;
-uniform sampler2D character_distance_falloff_curve : source_color;
-uniform float character_push_strength = 1.0;
-
-varying vec3 debug_wind;
-varying float debug_noise;
-
-varying vec3 worldPos;
 
 void vertex() {
 	NORMAL = vec3(0, 1, 0);
@@ -30,15 +19,11 @@ void vertex() {
 
 	vec2 normalized_wind_direction = normalize(wind_horizontal_direction);
 	vec2 world_uv = world_vert.xz / wind_texture_tile_size + -normalized_wind_direction * TIME * wind_speed;
-	// we displace only the top part of the mesh
-	// note that this means that the mesh needs to have UV in a way that the bottom of UV space
-	// is at the top of the mesh
-	float displacement_affect = (1.0 - UV.y);
-	float wind_noise_intensity = (textureLod(wind_noise, world_uv , 0.0).r - 0.5);
+	float displacement_affect = (1.0 - UV.y); 	// Displace only the top part of the mesh.
+	wind_noise_intensity = (textureLod(wind_noise, world_uv , 0.0).r - 0.5);
 
 
-	// We convert the direction of the wind into vertex space from world space
-	// if we used it directly in vertex space, rotated blades of grass wouldn't behave properly
+	// Convert the direction of the wind into vertex space from world space to account for rotated grass.
 	vec2 vert_space_horizontal_dir = (inverse(MODEL_MATRIX) * vec4(wind_horizontal_direction, 0.0,0.0)).xy;
 	vert_space_horizontal_dir = normalize(vert_space_horizontal_dir);
 
@@ -54,37 +39,12 @@ void vertex() {
 		wind_strength
 	);
 	VERTEX += bump_wind * displacement_affect;
-	debug_wind = bump_wind;
-	debug_noise=wind_noise_intensity;
-
-	// At the moment the blades are pushed away in a perfectly circular manner.
-	// We could distort the distance to the character based on a noise, to break a bit the
-	// circular shape. We could distort the falloff by sampling in a noise based on the xz coordinates.
-	// The task is left to the reader
-
-	vec3 dir_to_character = character_position - MODEL_MATRIX[3].xyz;
-	// uncomment the following line to have a horizontal only character push
-//	dir_to_character.y = 0.0;
-	float distance_to_character = length(dir_to_character);
-	float falloff = 1.0 - smoothstep(0.0, 1.0, distance_to_character/character_radius);
-	// Because we operate in vertex space, we need to convert the direction to the character
-	// in vertex space. Otherwise, it wouldn't work for rotated blades of grass.
-	// comment the next line to observe how the blades are not all facing away from the character.
-	dir_to_character = (inverse(MODEL_MATRIX) * vec4(dir_to_character, 0.0)).xyz;
-	dir_to_character = normalize(dir_to_character);
-
-	// sample the curve based on how far we are from the character, in normalized coordinates
-	float falloff_curve = texture(character_distance_falloff_curve, vec2(falloff)).x;
-	// direction to character is inverted because we want to point away from it
-	VERTEX += normalize(-dir_to_character) * falloff_curve * character_push_strength * displacement_affect;
-
-	worldPos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; // get world space by transforming local space
 }
 
 void fragment() {
 	float side = FRONT_FACING ? 1.0 : -1.0;
 	NORMAL = NORMAL * side;
-	ALBEDO = texture(color_ramp, vec2(1.0 - UV.y, 0)).rgb;
+	ALBEDO = texture(color, vec2(1.0 - UV.y, 0)).rgb;
 	SPECULAR = 0.5;
-	ROUGHNESS = clamp(1.0 - (debug_noise * highlight_roughness_intensity), 0.0, 1.0);
+	ROUGHNESS = clamp(1.0 - (wind_noise_intensity * highlight_roughness_intensity), 0.0, 1.0);
 }
