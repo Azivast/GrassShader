@@ -1,5 +1,5 @@
 shader_type spatial;
-render_mode cull_disabled, unshaded;
+render_mode cull_disabled;
 
 uniform float wind_speed = 0.2;
 uniform float wind_strength = 2.0;
@@ -9,8 +9,9 @@ uniform float wind_texture_tile_size = 20.0;
 uniform float wind_vertical_strength = 0.3;
 uniform vec2 wind_horizontal_direction = vec2(1.0,0.5);
 
-uniform sampler2D color_ramp:source_color;
-uniform vec3 highlight : source_color;
+uniform vec4 topColor:source_color = vec4(0.2,0.2,0.2,1);
+uniform vec4 bottomColor:source_color = vec4(1,1,1,1);
+
 // we need a tiling noise here!
 uniform sampler2D wind_noise :source_color;
 
@@ -25,17 +26,17 @@ varying float debug_noise;
 varying vec3 worldPos;
 
 void vertex() {
-
+	NORMAL = vec3(0, 1, 0);
 	vec3 world_vert = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 
 	vec2 normalized_wind_direction = normalize(wind_horizontal_direction);
-	vec2 world_uv = world_vert.xz / wind_texture_tile_size + normalized_wind_direction * TIME * wind_speed;
+	vec2 world_uv = world_vert.xz / wind_texture_tile_size + -normalized_wind_direction * TIME * wind_speed;
 	// we displace only the top part of the mesh
 	// note that this means that the mesh needs to have UV in a way that the bottom of UV space
 	// is at the top of the mesh
 	float displacement_affect = (1.0 - UV.y);
 	float wind_noise_intensity = (textureLod(wind_noise, world_uv , 0.0).r - 0.5);
-	debug_noise=wind_noise_intensity;
+
 
 	// We convert the direction of the wind into vertex space from world space
 	// if we used it directly in vertex space, rotated blades of grass wouldn't behave properly
@@ -55,6 +56,7 @@ void vertex() {
 	);
 	VERTEX += bump_wind * displacement_affect;
 	debug_wind = bump_wind;
+	debug_noise=wind_noise_intensity;
 
 	// At the moment the blades are pushed away in a perfectly circular manner.
 	// We could distort the distance to the character based on a noise, to break a bit the
@@ -78,17 +80,14 @@ void vertex() {
 	VERTEX += normalize(-dir_to_character) * falloff_curve * character_push_strength * displacement_affect;
 
 	worldPos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; // get world space by transforming local space
+
+	COLOR = mix(topColor, bottomColor, UV.y);
 }
 
 void fragment() {
-	ALBEDO = texture(color_ramp, vec2(1.0 - UV.y, 0)).rgb;
-	vec3 noiseLevel = texture(wind_noise, worldPos.xz / wind_texture_tile_size).rgb;
-
-	ALBEDO = mix(texture(color_ramp, vec2(1.0 - UV.y, 0)).rgb, highlight, debug_wind.r); // much to do here
-	//ALBEDO = mix(highlighttexture(color_ramp, vec2(1.0 - UV.y, 0)).rgb, debug_wind.r); // much to do here
-
 	float side = FRONT_FACING ? 1.0 : -1.0;
 	NORMAL = NORMAL * side;
+	ALBEDO = COLOR.rgb;
 	SPECULAR = 0.5;
-	ROUGHNESS = clamp(1.0 - (debug_noise), 0.0, 1.0);
+	ROUGHNESS = clamp(1.0 - (debug_noise * 2.0), 0.0, 1.0);
 }

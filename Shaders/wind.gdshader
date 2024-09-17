@@ -11,7 +11,7 @@ vec2 random2(vec2 p) {
 }
 
 // Nosie function that finds minimum distance to points for every p
-float worley2(vec2 p) { 
+float worley2(vec2 p) {
 	float dist = 1.0;
 	vec2 i_p = floor(p);
 	vec2 f_p = fract(p);
