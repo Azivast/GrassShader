@@ -9,9 +9,8 @@ uniform float wind_texture_tile_size = 20.0;
 uniform float wind_vertical_strength = 0.3;
 uniform vec2 wind_horizontal_direction = vec2(1.0,0.5);
 
-uniform vec4 topColor:source_color = vec4(0.2,0.2,0.2,1);
-uniform vec4 bottomColor:source_color = vec4(1,1,1,1);
-
+uniform sampler2D color_ramp:source_color;
+uniform float highlight_roughness_intensity = 1.0;
 // we need a tiling noise here!
 uniform sampler2D wind_noise :source_color;
 
@@ -80,14 +79,12 @@ void vertex() {
 	VERTEX += normalize(-dir_to_character) * falloff_curve * character_push_strength * displacement_affect;
 
 	worldPos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; // get world space by transforming local space
-
-	COLOR = mix(topColor, bottomColor, UV.y);
 }
 
 void fragment() {
 	float side = FRONT_FACING ? 1.0 : -1.0;
 	NORMAL = NORMAL * side;
-	ALBEDO = COLOR.rgb;
+	ALBEDO = texture(color_ramp, vec2(1.0 - UV.y, 0)).rgb;
 	SPECULAR = 0.5;
-	ROUGHNESS = clamp(1.0 - (debug_noise * 2.0), 0.0, 1.0);
+	ROUGHNESS = clamp(1.0 - (debug_noise * highlight_roughness_intensity), 0.0, 1.0);
 }
