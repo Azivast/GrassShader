@@ -10,6 +10,7 @@ uniform float wind_vertical_strength = 0.3;
 uniform vec2 wind_horizontal_direction = vec2(1.0,0.5);
 
 uniform sampler2D color_ramp:source_color;
+uniform vec3 highlight : source_color;
 // we need a tiling noise here!
 uniform sampler2D wind_noise :source_color;
 
@@ -18,11 +19,13 @@ uniform float character_radius = 3.0;
 uniform sampler2D character_distance_falloff_curve : source_color;
 uniform float character_push_strength = 1.0;
 
-varying float debug_wind;
+varying vec3 debug_wind;
 varying float debug_noise;
 
+varying vec3 worldPos;
+
 void vertex() {
-	
+
 	vec3 world_vert = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 
 	vec2 normalized_wind_direction = normalize(wind_horizontal_direction);
@@ -38,11 +41,11 @@ void vertex() {
 	// if we used it directly in vertex space, rotated blades of grass wouldn't behave properly
 	vec2 vert_space_horizontal_dir = (inverse(MODEL_MATRIX) * vec4(wind_horizontal_direction, 0.0,0.0)).xy;
 	vert_space_horizontal_dir = normalize(vert_space_horizontal_dir);
-	
+
 	vec3 bump_wind = vec3(
 		wind_noise_intensity * vert_space_horizontal_dir.x,
 		1.0 - wind_noise_intensity,
-		wind_noise_intensity * vert_space_horizontal_dir.y 
+		wind_noise_intensity * vert_space_horizontal_dir.y
 	);
 	normalize(bump_wind);
 	bump_wind *= vec3(
@@ -51,13 +54,13 @@ void vertex() {
 		wind_strength
 	);
 	VERTEX += bump_wind * displacement_affect;
-	debug_wind = displacement_affect;
-	
+	debug_wind = bump_wind;
+
 	// At the moment the blades are pushed away in a perfectly circular manner.
 	// We could distort the distance to the character based on a noise, to break a bit the
 	// circular shape. We could distort the falloff by sampling in a noise based on the xz coordinates.
 	// The task is left to the reader
-	
+
 	vec3 dir_to_character = character_position - MODEL_MATRIX[3].xyz;
 	// uncomment the following line to have a horizontal only character push
 //	dir_to_character.y = 0.0;
@@ -73,12 +76,17 @@ void vertex() {
 	float falloff_curve = texture(character_distance_falloff_curve, vec2(falloff)).x;
 	// direction to character is inverted because we want to point away from it
 	VERTEX += normalize(-dir_to_character) * falloff_curve * character_push_strength * displacement_affect;
-	
+
+	worldPos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz; // get world space by transforming local space
 }
 
 void fragment() {
-	ALBEDO = texture(color_ramp, vec2(1.0 - UV.y, 0)).rgb ;
-	ALBEDO = texture(debug_noise, (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz);
+	ALBEDO = texture(color_ramp, vec2(1.0 - UV.y, 0)).rgb;
+	vec3 noiseLevel = texture(wind_noise, worldPos.xz / wind_texture_tile_size).rgb;
+
+	ALBEDO = mix(texture(color_ramp, vec2(1.0 - UV.y, 0)).rgb, highlight, debug_wind.r); // much to do here
+	//ALBEDO = mix(highlighttexture(color_ramp, vec2(1.0 - UV.y, 0)).rgb, debug_wind.r); // much to do here
+
 	float side = FRONT_FACING ? 1.0 : -1.0;
 	NORMAL = NORMAL * side;
 	SPECULAR = 0.5;
