@@ -1,96 +1,86 @@
 shader_type spatial;
-render_mode cull_disabled; // disavle backface culling
+render_mode cull_disabled, unshaded;
 
-uniform vec4 topColor:source_color = vec4(0,0,0,1);
-uniform vec4 bottomColor:source_color = vec4(1,1,1,1);
+uniform float wind_speed = 0.2;
+uniform float wind_strength = 2.0;
+// How big, in world space, is the noise texture
+// wind will tile every wind_texture_tile_size
+uniform float wind_texture_tile_size = 20.0;
+uniform float wind_vertical_strength = 0.3;
+uniform vec2 wind_horizontal_direction = vec2(1.0,0.5);
 
-uniform vec2 windDirection = vec2(0.0, -1.0);
-uniform float windScale = 4.0;
-uniform float windPower = 2.0;
-uniform float windSpeed = 1.0;
+uniform sampler2D color_ramp:source_color;
+// we need a tiling noise here!
+uniform sampler2D wind_noise :source_color;
 
-varying float wind;
+uniform vec3 character_position;
+uniform float character_radius = 3.0;
+uniform sampler2D character_distance_falloff_curve : source_color;
+uniform float character_push_strength = 1.0;
 
-uniform float degSwayPitch = 80.0;
-uniform float degSwayYaw = 45.0;
-
-const vec3 UP = vec3(0, 1, 0);
-const vec3 RIGHT = vec3(1, 0, 0);
-const float DEG2RAD = (PI/180.0);
-
-// Rodrigues' rotation formula
-mat3 mat3FromAxisAngle(float angle, vec3 axis) {
-	float s = sin(angle);
-	float c = cos(angle);
-	float t = 1.0 - c;
-	float x = axis.x;
-	float y = axis.y;
-	float z = axis.z;
-	
-	return mat3(
-		vec3(t*x*x+c, t*x*y-s*z, t*x*z+s*y),
-		vec3(t*x*y+s*z, t*y*y+c, t*y*z-s*x),
-		vec3(t*x*z-s*y, t*y*z+s*z, t*z*z+c)
-	);
-}
-
-// "Random" function
-vec2 random2(vec2 p) {
-	return fract(sin(vec2(
-		dot(p, vec2(142.45, 312.2)),
-		dot(p, vec2(234.02, 42.11))
-	)) * 54.1);
-}
-
-// Nosie function that finds minimum distance to points for every p
-float worley2(vec2 p) { 
-	float dist = 1.0;
-	vec2 i_p = floor(p);
-	vec2 f_p = fract(p);
-	for(int y = -1; y <= 1; y++) {
-		for(int x = -1; x <= 1; x++){
-			vec2 n = vec2(float(x), float(y));
-			vec2 diff = n + random2(i_p + n) - f_p;
-			dist = min(dist, length(diff));
-		}
-	}
-	return dist;
-}
+varying float debug_wind;
+varying float debug_noise;
 
 void vertex() {
-	NORMAL = vec3(0, 1, 0);
-	vec2 uv = (MODEL_MATRIX * vec4(VERTEX, -1)).xz * windScale;
-	vec3 windDirectionNormalized = normalize(vec3(windDirection.x, 0, windDirection.y));
-	float timeScaled = TIME * windSpeed;
-	uv += windDirectionNormalized.xy * timeScaled;
-	wind = pow(worley2(uv), windPower);// * UV2.y; not sure what uv2 does here
 	
-	mat3 toModel = inverse(mat3(MODEL_MATRIX));
-	vec3 windForward = toModel * windDirectionNormalized;
-	vec3 windRight = normalize(cross(windForward, UP));
-	
-	float swayPitch = ((degSwayPitch * DEG2RAD) * wind); //+ INSTANCE_CUSTOM.z
-	float swayYaw = ((degSwayYaw * DEG2RAD) * sin(timeScaled) * wind); //+ INSTANCE_CUSTOM.w
-	
-	mat3 rotationRight = mat3FromAxisAngle(swayPitch, windRight);
-	mat3 rotationForward = mat3FromAxisAngle(swayYaw, windForward);
-	
-	vec3 vertex = VERTEX;
-	vertex = mat3FromAxisAngle(TIME, UP) * vertex;
-	VERTEX = rotationRight * rotationForward * vertex;
+	vec3 world_vert = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 
-	COLOR = mix(topColor, bottomColor, UV.y);
+	vec2 normalized_wind_direction = normalize(wind_horizontal_direction);
+	vec2 world_uv = world_vert.xz / wind_texture_tile_size + normalized_wind_direction * TIME * wind_speed;
+	// we displace only the top part of the mesh
+	// note that this means that the mesh needs to have UV in a way that the bottom of UV space
+	// is at the top of the mesh
+	float displacement_affect = (1.0 - UV.y);
+	float wind_noise_intensity = (textureLod(wind_noise, world_uv , 0.0).r - 0.5);
+	debug_noise=wind_noise_intensity;
+
+	// We convert the direction of the wind into vertex space from world space
+	// if we used it directly in vertex space, rotated blades of grass wouldn't behave properly
+	vec2 vert_space_horizontal_dir = (inverse(MODEL_MATRIX) * vec4(wind_horizontal_direction, 0.0,0.0)).xy;
+	vert_space_horizontal_dir = normalize(vert_space_horizontal_dir);
+	
+	vec3 bump_wind = vec3(
+		wind_noise_intensity * vert_space_horizontal_dir.x,
+		1.0 - wind_noise_intensity,
+		wind_noise_intensity * vert_space_horizontal_dir.y 
+	);
+	normalize(bump_wind);
+	bump_wind *= vec3(
+		wind_strength,
+		wind_vertical_strength,
+		wind_strength
+	);
+	VERTEX += bump_wind * displacement_affect;
+	debug_wind = displacement_affect;
+	
+	// At the moment the blades are pushed away in a perfectly circular manner.
+	// We could distort the distance to the character based on a noise, to break a bit the
+	// circular shape. We could distort the falloff by sampling in a noise based on the xz coordinates.
+	// The task is left to the reader
+	
+	vec3 dir_to_character = character_position - MODEL_MATRIX[3].xyz;
+	// uncomment the following line to have a horizontal only character push
+//	dir_to_character.y = 0.0;
+	float distance_to_character = length(dir_to_character);
+	float falloff = 1.0 - smoothstep(0.0, 1.0, distance_to_character/character_radius);
+	// Because we operate in vertex space, we need to convert the direction to the character
+	// in vertex space. Otherwise, it wouldn't work for rotated blades of grass.
+	// comment the next line to observe how the blades are not all facing away from the character.
+	dir_to_character = (inverse(MODEL_MATRIX) * vec4(dir_to_character, 0.0)).xyz;
+	dir_to_character = normalize(dir_to_character);
+
+	// sample the curve based on how far we are from the character, in normalized coordinates
+	float falloff_curve = texture(character_distance_falloff_curve, vec2(falloff)).x;
+	// direction to character is inverted because we want to point away from it
+	VERTEX += normalize(-dir_to_character) * falloff_curve * character_push_strength * displacement_affect;
+	
 }
 
 void fragment() {
-	//// If pixel isn't front facing, flip normal
-	//if (!FRONT_FACING) {
-		//NORMAL = -NORMAL;
-	//}
-	//float side = FRONT_FACING ? 1.0 : -1.0;
+	ALBEDO = texture(color_ramp, vec2(1.0 - UV.y, 0)).rgb ;
+	ALBEDO = texture(debug_noise, (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz);
 	float side = FRONT_FACING ? 1.0 : -1.0;
 	NORMAL = NORMAL * side;
-	ALBEDO = COLOR.rgb;
 	SPECULAR = 0.5;
-	ROUGHNESS = clamp(1.0 - (wind * windPower), 0.0, 1.0);
+	ROUGHNESS = clamp(1.0 - (debug_noise), 0.0, 1.0);
 }
