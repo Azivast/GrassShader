@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="GrassShader"
-run/main_scene="res://Scenes/grass.tscn"
+run/main_scene="res://Scenes/grass godot-perlin.tscn"
 config/features=PackedStringArray("4.3", "Forward Plus")
 config/icon="res://icon.svg"
 

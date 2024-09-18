@@ -3,3 +3,8 @@ https://www.youtube.com/watch?v=usdwhhZWIJ4&t=608s
 
 https://polyhaven.com/a/hilly_terrain_01
 https://gist.github.com/patriciogonzalezvivo/670c22f3966e662d2f83
+https://stegu.github.io/webgl-noise/webdemo/
+
+potential:
+https://www.tandfonline.com/doi/full/10.1080/2151237X.2012.649621?needAccess=true
+https://dl.acm.org/doi/abs/10.1145/1321261.1321305

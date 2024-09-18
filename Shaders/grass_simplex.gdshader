@@ -15,6 +15,7 @@ uniform float highlight_roughness_intensity = 1.0;
 
 vec3 permute(vec3 x) { return mod(((x*34.0)+1.0)*x, 289.0); }
 
+// Simplex noise
 float snoise(vec2 v){
   const vec4 C = vec4(0.211324865405187, 0.366025403784439,
            -0.577350269189626, 0.024390243902439);
@@ -50,7 +51,7 @@ void vertex() {
 	vec2 world_uv = world_vert.xz / wind_texture_tile_size + -normalized_wind_direction * TIME * wind_speed;
 	float displacement_affect = (1.0 - UV.y); 	// Displace only the top part of the mesh.
 	//wind_noise_intensity = (textureLod(wind_noise, world_uv , 0.0).r - 0.5);
-	wind_noise_intensity = snoise()
+	wind_noise_intensity = (snoise(world_uv) - 0.5);
 
 
 	// Convert the direction of the wind into vertex space from world space to account for rotated grass.
